@@ -1,0 +1,175 @@
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <Servo.h>
+
+const int pumpe = D8;
+
+const int GSM1 = D0;
+const int in1 = D1;
+const int in2 = D2;
+
+const int GSM2 = D3;
+const int in3 = D4;
+const int in4 = D5;
+
+Servo servo;
+
+
+ 
+const char* ssid = "Fernsteuerung";   
+const char* password = "";   
+
+const int output = 2;
+int sliderValue = 0;
+int sliderNumber = 0;
+
+int pinValues[5] = { 0 };
+
+
+IPAddress myIP;
+
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv='refresh' content='30' charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <title> Fernsteuerung Boot </title>
+  <style>
+   body {
+    font-family: oswald;
+    color: black;
+    background-color:#BFF0F2;
+   }
+  </style>
+</head>
+<body>
+<header style='background-color:#000000; padding:3rem 0;'>
+<h1 style='text-align:center; color:#E1FFFF;'>Fernsteuerung</h1>
+<h1 style='text-align:center; color:#E1FFFF;'>Blue Pearl</h1>
+</header>
+  
+  <p>Motor Links</p>
+  <input type="range" onchange="updateSliderPWM(this, 1)" min="0" max="255" value="0" step="1" class="slider">
+  <span id="textSliderValue"></span>
+  
+  <p>Motor Rechts</p>
+  <input type="range" onchange="updateSliderPWM(this, 2)" min="0" max="255" value="0" step="1" class="slider">
+  <span id="textSliderValue"></span>
+  
+  <p>Servo</p>
+  <input type="range" onchange="updateSliderPWM(this, 3)" min="0" max="180" value="90" step="1" class="slider">
+  <span id="textSliderValue"></span>
+   
+  <p>Pumpe</p>
+  <input type="range" onchange="updateSliderPWM(this, 5)" min="0" max="255" value="0" step="1" class="slider">
+  <span id="textSliderValue"></span>
+  
+  <script>
+  function updateSliderPWM(element, number) {
+    
+    element.nextElementSibling.value = element.value
+    let sliderValue = element.value
+    console.log(sliderValue);
+    fetch('/set?number=' + number + '&value=' + sliderValue)
+}
+
+</script>
+   <footer class ="container" style ='margin-top:6rem'>
+        <div class ="row bottom-left">
+          <p class ="col-sm-4">
+            &copy;2022 Team Blue Pearl
+            </p>
+        </div>
+   </footer>
+</body>
+</html>
+)rawliteral";
+
+AsyncWebServer server(80);
+
+ 
+void setup() {
+
+  pinMode(pumpe,OUTPUT);
+  pinMode(GSM1, OUTPUT);    
+  pinMode(GSM2, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+  pinMode(LED_BUILTIN,OUTPUT);
+
+  servo.attach(D6);
+  
+  
+  Serial.begin(115200); 
+
+ 
+  WiFi.softAP(ssid);
+
+  myIP = WiFi.softAPIP();
+  
+  Serial.println("");
+  Serial.println("Online");
+  Serial.println(myIP);
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html);
+  });
+
+  server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    
+    if (request->hasParam("value") && request->hasParam("value")) {
+      sliderValue = request->getParam("value")->value().toInt();
+      sliderNumber = request->getParam("number")->value().toInt();
+      pinValues[sliderNumber - 1] = sliderValue;
+      analogWrite(output, sliderValue);
+    }
+    else {
+      inputMessage = "No message sent";
+    }
+    Serial.println(inputMessage);
+
+    request->send(200, "text/plain", "OK");
+  });
+  
+  server.begin();
+  
+ 
+}
+
+void pump()
+{
+   if(pinValues[4]==0)
+   {
+    digitalWrite(LED_BUILTIN,HIGH);
+   }
+   else
+   {
+    digitalWrite(LED_BUILTIN,LOW);
+   }
+}
+ 
+void loop() {
+
+
+pump();
+
+digitalWrite(in1, HIGH);
+digitalWrite(in2, LOW);
+
+analogWrite(GSM1, pinValues[0]);
+
+digitalWrite(in3, HIGH);
+digitalWrite(in4, LOW);
+
+analogWrite(GSM2, pinValues[1]);
+
+servo.write(pinValues[2]);
+
+analogWrite(pumpe,pinValues[4]);
+}
